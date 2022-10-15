@@ -18,7 +18,7 @@ presets_condition_groups <- function(
     } else {
       repository <- comp$container$data[[pipeline_repository]]
     }
-    if(!inherits(repository, "rave_prepare_subject")) {
+    if(!inherits(repository, "rave_repository")) {
       return(NULL)
     }
     repository
@@ -26,7 +26,7 @@ presets_condition_groups <- function(
 
   get_subject <- function(){
     repo <- get_repo()
-    if(inherits(repo, "rave_prepare_subject")) {
+    if(inherits(repo, "rave_repository")) {
       subject <- repo$subject
       return(subject)
     }
@@ -48,7 +48,7 @@ presets_condition_groups <- function(
 
   comp$ui_func <- function(id, value, depends){
 
-    ravedash::input_card(
+    input_card(
       class_header = "shidashi-anchor",
       title = label,
       href = card_href(label, module_id = comp$container$module_id),
@@ -62,14 +62,14 @@ presets_condition_groups <- function(
         components = shiny::div(
           shiny::textInput(inputId = "group_name", label = "Name"),
           # shiny::selectInput(inputId = "group_conditions", label = NULL, choices = "", multiple = TRUE)
-          shinyWidgets::pickerInput(
+          shiny::selectInput(
             inputId = "group_conditions", label = NULL,
-            choices = "", multiple = TRUE,
-            options = list(
-              "live-search" = TRUE,
-              "actions-box" = TRUE,
-              "size" = 4
-            )
+            choices = "", multiple = TRUE
+            # options = list(
+            #   "live-search" = TRUE,
+            #   "actions-box" = TRUE,
+            #   "size" = 4
+            # )
           )
         )
       )
@@ -103,10 +103,10 @@ presets_condition_groups <- function(
         inputId = comp$id,
         initialization = list(
           group_conditions = list(
-            choices = conditions,
-            choicesOpt = list(
-              subtext = sprintf("(n = %d)", cond_cont)
-            )
+            choices = conditions
+            # choicesOpt = list(
+            #   subtext = sprintf("(n = %d)", cond_cont)
+            # )
           )
         ),
         value = value,

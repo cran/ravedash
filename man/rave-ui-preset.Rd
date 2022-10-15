@@ -6,7 +6,7 @@
 %   R/preset-import-setup-subject.R, R/preset-loader-3dviewer.R,
 %   R/preset-loader-electrode.R, R/preset-loader-epoch.R,
 %   R/preset-loader-project.R, R/preset-loader-reference.R,
-%   R/preset-loader-subject.R
+%   R/preset-loader-subject.R, R/preset-sync-settings.R
 \name{rave-ui-preset}
 \alias{rave-ui-preset}
 \alias{presets_analysis_electrode_selector2}
@@ -18,11 +18,14 @@
 \alias{presets_import_setup_channels}
 \alias{presets_import_setup_native}
 \alias{presets_loader_3dviewer}
+\alias{presets_loader_3dviewer2}
 \alias{presets_loader_electrodes}
 \alias{presets_loader_epoch}
 \alias{presets_loader_project}
 \alias{presets_loader_reference}
 \alias{presets_loader_subject}
+\alias{presets_loader_subject_only}
+\alias{presets_loader_sync_project_subject}
 \title{Preset reusable front-end components for 'RAVE' modules}
 \usage{
 presets_analysis_electrode_selector2(
@@ -31,7 +34,9 @@ presets_analysis_electrode_selector2(
   label = "Select Electrodes",
   loader_project_id = "loader_project_name",
   loader_subject_id = "loader_subject_code",
-  pipeline_repository = "repository"
+  pipeline_repository = "repository",
+  start_simple = FALSE,
+  multiple = TRUE
 )
 
 presets_analysis_ranges(
@@ -65,8 +70,8 @@ presets_import_export_subject_pipeline(
   loader_project_id = "loader_project_name",
   loader_subject_id = "loader_subject_code",
   pipeline_repository = "repository",
-  settings_entries = c("loaded_electrodes", "epoch_choice",
-    "epoch_choice__trial_starts", "epoch_choice__trial_ends", "reference_name"),
+  settings_entries = c("loaded_electrodes", "epoch_choice", "epoch_choice__trial_starts",
+    "epoch_choice__trial_ends", "reference_name"),
   fork_mode = c("exclude", "include")
 )
 
@@ -95,7 +100,17 @@ presets_loader_3dviewer(
   loader_project_id = "loader_project_name",
   loader_subject_id = "loader_subject_code",
   loader_reference_id = "loader_reference_name",
-  loader_electrodes_id = "loader_electrode_text"
+  loader_electrodes_id = "loader_electrode_text",
+  gadgets = c("standalone", "download")
+)
+
+presets_loader_3dviewer2(
+  id = "loader_3d_viewer",
+  height = "600px",
+  loader_project_id = "loader_project_name",
+  loader_subject_id = "loader_subject_code",
+  loader_electrodes_id = "loader_electrode_text",
+  gadgets = c("standalone", "download")
 )
 
 presets_loader_electrodes(
@@ -136,6 +151,24 @@ presets_loader_subject(
   loader_project_id = "loader_project_name",
   checks = c("notch", "wavelet")
 )
+
+presets_loader_subject_only(
+  id = "loader_subject_code",
+  varname = "subject_code",
+  label = "Subject",
+  multiple = FALSE
+)
+
+presets_loader_sync_project_subject(
+  id = "loader_sync_project_subject",
+  label = "Sync subject from most recently loaded",
+  varname = "loader_sync_project_subject",
+  loader_project_id = "loader_project_name",
+  loader_subject_id = "loader_subject_code",
+  from_module = NULL,
+  project_varname = "project_name",
+  subject_varname = "subject_code"
+)
 }
 \arguments{
 \item{id}{input or output ID of the element; this ID will be prepended with
@@ -155,6 +188,10 @@ different to the default}
 repository from functions such as \code{\link[raveio]{prepare_subject_bare}},
 \code{\link[raveio]{prepare_subject_with_epoch}}, and
 \code{\link[raveio]{prepare_subject_power}}}
+
+\item{start_simple}{whether to start in simple view and hide optional inputs}
+
+\item{multiple}{whether to allow multiple inputs}
 
 \item{max_components}{maximum number of components for compound inputs}
 
@@ -184,11 +221,19 @@ different to the default}
 \item{loader_electrodes_id}{the ID of \code{presets_loader_electrodes} if
 different to the default}
 
+\item{gadgets}{gadget types to include; see \code{type} argument in function
+\code{\link{output_gadget}}}
+
 \item{mode}{whether to create new reference, or simply to choose from
 existing references}
 
 \item{checks}{whether to check if subject has been applied with 'Notch'
 filters or 'Wavelet'; default is both.}
+
+\item{from_module}{which module to extract input settings}
+
+\item{project_varname, subject_varname}{variable names that should be
+extracted from the settings file}
 }
 \value{
 A \code{'RAVEShinyComponent'} instance.

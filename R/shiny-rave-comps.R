@@ -16,6 +16,9 @@ RAVEShinyComponent <- R6::R6Class(
 
       deps_has_validator <- FALSE
       for(dep in depends){
+        if(!inherits(dep, "RAVEShinyComponent")) {
+          next
+        }
         if(!dep$initialized){
           dep$server_func(input = input, output = output, session = session)
         }
@@ -104,7 +107,7 @@ RAVEShinyComponent <- R6::R6Class(
 
     get_subject = function(){
       repo <- self$get_repository()
-      if(inherits(repo, "rave_prepare_subject")) {
+      if(inherits(repo, "rave_repository")) {
         subject <- repo$subject
         return(subject)
       }

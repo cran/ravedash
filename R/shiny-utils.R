@@ -7,10 +7,12 @@ shiny_icons <- structure(list(), class = "ravedash_shiny_icons")
 
 .shiny_icons_methods <- local({
   li <- NULL
+  dep <- NULL
 
   ensure_li <- function(){
     if(is.null(li)){
       li <<- list(
+        brain = "brain",
         bars = "bars",
         grid = "th",
         keyboard = "keyboard",
@@ -22,6 +24,10 @@ shiny_icons <- structure(list(), class = "ravedash_shiny_icons")
         angle_left = 'angle-left',
         angle_up = 'angle-up',
         angle_down = 'angle-down',
+        angle_double_right = 'angle-double-right',
+        angle_double_left = 'angle-double-left',
+        angle_double_up = 'angle-double-up',
+        angle_double_down = 'angle-double-down',
         arrow_right = 'arrow-right',
         arrow_left = 'arrow-left',
         arrow_up = 'arrow-up',
@@ -48,16 +54,38 @@ shiny_icons <- structure(list(), class = "ravedash_shiny_icons")
         wrench = "wrench"
       )
     }
+    if(is.null(dep)) {
+      dep <<- htmltools::htmlDependency(
+        name = "fontawesome-free-ravedash",
+        version = "5.15.4",
+        package = 'ravedash',
+        src = c(file = "assets"),
+        stylesheet = "css/all.min.css",
+        all_files = TRUE
+      )
+    }
     li
   }
 
   get_icon <- function(name, class = NULL){
     ensure_li()
-    re <- shiny::icon(li[[name]], class = class)
+    re <- li[[name]]
     if(is.null(re)){
-      warning("Icon `", name, "` not found, please file an issue to the 'RAVE' team to support your icon")
-      re <- shiny::icon(name)
+      # warning("Icon `", name, "` not found, please file an issue to the 'RAVE' team to support your icon")
+      re <- name
     }
+    # class <- dipsaus::combine_html_class(sprintf("fa-%s", re), class)
+    # if(is.null(class) || !grepl("fa[sb]{0,1}", class)) {
+    #   class <- dipsaus::combine_html_class("fa", class)
+    # }
+    # re <- htmltools::tags$li(
+    #   class = class,
+    #   role = "presentation",
+    #   `aria-label` = sprintf("%s icon", re),
+    #   dep
+    # )
+    re <- shiny::icon(re, class = class, verify_fa = FALSE, html_dependency = dep)
+    attr(re, "browsable_html") <- TRUE
     re
   }
 
@@ -119,7 +147,8 @@ names.ravedash_shiny_icons <- function(x){
 #' @title 'RAVE' run-time events
 #' @description A set of preset behaviors used by 'RAVE' modules
 #' @param session shiny session, usually automatically determined
-#' @param .rave_id internally used to store unique session identification
+#' @param rave_id,.rave_id internally used to store unique session
+#' identification key
 #' @param key event key to fire or to monitor
 #' @param value event value
 #' @param global whether to notify other sessions (experimental and not
@@ -244,7 +273,15 @@ register_rave_session <- function(session = shiny::getDefaultReactiveDomain(), .
   root_session <- session$rootScope()
 
   if(!inherits(session$userData$ravedash_reactive_handlers, "fastmap2")){
-    session$userData$ravedash_reactive_handlers <- dipsaus::fastmap2()
+    handler_map <- dipsaus::fastmap2()
+    handler_map$output_options <- dipsaus::fastmap2()
+    session$userData$ravedash_reactive_handlers <- handler_map
+
+    # Probably first time registering session
+    clean_shiny_sessions(active = FALSE)
+    session$onEnded(function() {
+      clean_shiny_sessions(sessions = session, active = TRUE)
+    })
   }
 
   if(!root_session$cache$exists('rave_id')){
@@ -287,6 +324,52 @@ register_rave_session <- function(session = shiny::getDefaultReactiveDomain(), .
     rave_event = rave_event,
     loop_event = rave_loop_events
   )
+}
+
+clean_shiny_sessions <- function(sessions = NULL, active = FALSE) {
+  sess <- get(".sessions")
+  current_size <- sess$size()
+
+  # Do not actively clean ended sessions
+  if(!is.null(sessions) && length(sessions)) {
+    active <- TRUE
+    if(!is.list(sessions)) {
+      sessions <- list(sessions)
+    }
+  }
+  if( !active && current_size <= 20 ) {
+    return()
+  }
+  if(is.null(sessions)) {
+    rave_ids <- sess$keys()
+  } else {
+    rave_ids <- unlist(lapply(sessions, function(session) {
+      tryCatch({
+        session$userData$rave_id
+      }, error = function(e){ NULL })
+    }))
+  }
+
+  lapply(rave_ids, function(key){
+    try({
+      item <- sess$get(key, missing = NULL)
+      if(is.null(item)){ return() }
+      if(!is.list(item)){
+        sess$remove(key)
+        return()
+      }
+      if(!is.environment(item$root_session)){
+        sess$remove(key)
+        return()
+      }
+      root_session <- item$root_session
+      if( root_session$isEnded() ){
+        sess$remove(key)
+        return()
+      }
+    }, silent = TRUE)
+  })
+  invisible(sess$size())
 }
 
 #' @rdname rave-runtime-events
@@ -351,6 +434,17 @@ fire_rave_event <- function(key, value, global = FALSE, force = FALSE,
     tool$rave_event[[key]] <- value
   }
   invisible()
+}
+
+#' @rdname rave-runtime-events
+#' @export
+get_session_by_rave_id <- function(rave_id) {
+  sess <- get(x = '.sessions')
+  re <- sess$get(rave_id)
+  if(is.list(re)) {
+    return(re$root_session)
+  }
+  return()
 }
 
 #' @rdname rave-runtime-events
@@ -428,6 +522,8 @@ current_shiny_theme <- function(default, session = shiny::getDefaultReactiveDoma
 #' @param label run-analysis button label; default is \code{"Run Analysis"}
 #' @param auto_recalculation whether to show the automatic calculation button;
 #' default is true
+#' @param class additional class for the footer
+#' @param style additional style for the footer
 #' @return 'HTML' tags
 #'
 #' @examples
@@ -462,11 +558,14 @@ current_shiny_theme <- function(default, session = shiny::getDefaultReactiveDoma
 #' }
 #'
 #' @export
-ravedash_footer <- function(module_id = NULL, label = "Run Analysis",
-                            auto_recalculation = TRUE){
+ravedash_footer <- function(
+    module_id = NULL, label = "Run Analysis",
+    auto_recalculation = TRUE, class = NULL, style = NULL
+){
   ns <- shiny::NS(module_id)
   shiny::div(
-    class = "back-to-top ravedash-footer",
+    class = dipsaus::combine_html_class("ravedash-back-to-top ravedash-footer", class),
+    style = style,
     shiny::div(
       class = "btn-group dropup",
       role="group",
@@ -484,7 +583,7 @@ ravedash_footer <- function(module_id = NULL, label = "Run Analysis",
       ),
       shiny::tags$button(
         type="button",
-        class="btn btn-default border-right-1 border-left-1 rave-button",
+        class="btn btn-default border-right-1 border-left-1 rave-button rave-button-autorecalculate",
         `data-toggle` = "tooltip",
         title = "Keyboard shortcut: CTRL+Enter / Command+Return (OSX)",
         `rave-action` = '{"type": "run_analysis"}',
@@ -599,8 +698,11 @@ ravedash_footer <- function(module_id = NULL, label = "Run Analysis",
 
 }
 
-
-
+#' Get current active module information, internally used
+#' @param session shiny reactive domain, default is current domain
+#' @return A named list, including module ID, module label, internal
+#' \code{'rave_id'}.
+#' @export
 get_active_module_info <- function(session = shiny::getDefaultReactiveDomain()){
   if(is.environment(session)){
     rave_events <- session$cache$get("rave_reactives", missing = NULL)
@@ -625,32 +727,51 @@ get_active_module_info <- function(session = shiny::getDefaultReactiveDomain()){
 #' @param label label to display
 #' @param icon icon before the label
 #' @param type used to calculate \code{class}
-#' @param width,btn_type,class,... passed to 'HTML' \code{button} tag
+#' @param btn_type button style, choices are \code{'button'} or \code{'link'}
+#' @param width,class,style,... passed to 'HTML' tag
 #' @return A 'HTML' button tag
 #' @export
-run_analysis_button <- function(label = "Run analysis (Ctrl+Enter)",
-                                icon = NULL, width = NULL, type = "primary",
-                                btn_type = "button", class = "", ...){
+run_analysis_button <- function(
+    label = "Run analysis (Ctrl+Enter)",
+    icon = NULL, width = NULL, type = "primary",
+    btn_type = c("button", "link"), class = "", style = "", ...){
   if (length(type) > 1) {
     type <- type[[1]]
   }
-  stopifnot2(length(type) == 0 || type[[1]] %in% c("default",
-                                                   "primary", "info", "success", "warning", "danger"), msg = "type must be in 'default', 'primary', 'info', 'success', 'warning', 'danger'")
 
   args <- list(...)
-  style <- c(args[["style"]], "")[[1]]
   width <- c(width, "auto")[[1]]
   style <- paste0("width: ", shiny::validateCssUnit(width),
                   ";", style)
-  class <- dipsaus::combine_html_class(
-    sprintf("btn btn-%s rave-button %s", type, class))
 
-  shiny::tags$button(
-    class = class,
-    style = style,
-    type = btn_type,
-    "rave-action" = '{"type": "run_analysis"}',
-    list(shidashi::as_icon(icon), label),
-    ...
-  )
+  btn_type <- match.arg(btn_type)
+
+  if(btn_type == "button") {
+    stopifnot2(length(type) == 0 || type[[1]] %in% c("default",
+                                                     "primary", "info", "success", "warning", "danger"), msg = "type must be in 'default', 'primary', 'info', 'success', 'warning', 'danger'")
+    class <- dipsaus::combine_html_class(
+      sprintf("btn btn-%s rave-button %s", type, class))
+
+    shiny::tags$button(
+      class = class,
+      style = style,
+      type = "button",
+      "rave-action" = '{"type": "run_analysis"}',
+      list(shidashi::as_icon(icon), label),
+      ...
+    )
+  } else {
+
+    class <- dipsaus::combine_html_class("rave-button", class)
+    shiny::tags$a(
+      href = "#",
+      class = class,
+      style = style,
+      "rave-action" = '{"type": "run_analysis"}',
+      ...,
+      list(label, shidashi::as_icon(icon))
+    )
+  }
+
+
 }

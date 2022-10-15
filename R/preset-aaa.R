@@ -32,10 +32,17 @@
 #' \code{'exclude'} mode, \code{settings_entries} will be excluded from the
 #' pipeline settings; in \code{'include'} mode, only \code{settings_entries}
 #' can be imported.
+#' @param from_module which module to extract input settings
+#' @param project_varname,subject_varname variable names that should be
+#' extracted from the settings file
 #' @param mode whether to create new reference, or simply to choose from
 #' existing references
 #' @param checks whether to check if subject has been applied with 'Notch'
 #' filters or 'Wavelet'; default is both.
+#' @param gadgets gadget types to include; see \code{type} argument in function
+#' \code{\link{output_gadget}}
+#' @param start_simple whether to start in simple view and hide optional inputs
+#' @param multiple whether to allow multiple inputs
 #' @returns A \code{'RAVEShinyComponent'} instance.
 #' @seealso \code{\link{new_rave_shiny_component_container}}
 NULL

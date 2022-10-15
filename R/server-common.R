@@ -92,6 +92,9 @@ module_server_common <- function(module_id, check_data_loaded, ..., session = sh
     output <- session$output
   }
 
+  # class(output) <- unique(c("ravedashoutput", class(output)))
+  # assign('output', output, envir = globalenv())
+
   if(missing(check_data_loaded) || !is.function(check_data_loaded)) {
     logger("`module_server_common`: `check_data_loaded` is missing. Data loader is disabled", level = "debug")
     check_data_loaded <- function(){ return(TRUE) }
@@ -115,6 +118,10 @@ module_server_common <- function(module_id, check_data_loaded, ..., session = sh
   )
   local_data <- dipsaus::fastmap2()
 
+  session$sendCustomMessage("shidashi.set_current_module", list(
+    module_id = module_id,
+    rave_id = tools$rave_id
+  ))
 
   module_is_active <- function(id = module_id){
     module <- get_active_module_info()
@@ -125,7 +132,7 @@ module_server_common <- function(module_id, check_data_loaded, ..., session = sh
 
   # parse, load module
   observe({
-    rave_action <- root_session$input[["@rave_action@"]]
+    rave_action <- .subset2(root_session, 'input')[["@rave_action@"]]
 
     if(!is.list(rave_action) || !length(rave_action$type)) { return() }
 
@@ -310,7 +317,7 @@ module_server_common <- function(module_id, check_data_loaded, ..., session = sh
     }),
     get_rave_event("run_analysis"),
     ignoreNULL = FALSE, ignoreInit = FALSE
-  ), millis = 300, priority = 99)
+  ), millis = 150, priority = 99)
 
   shiny::bindEvent(
     observe({
@@ -413,7 +420,7 @@ module_server_common <- function(module_id, check_data_loaded, ..., session = sh
 
   watch_input_changed <- shiny::debounce(shiny::reactive({
     local_reactives$watch_input_changed
-  }), millis = 100, priority = 100)
+  }), millis = 70, priority = 100)
 
   run_analysis_onchange <- function(inputIds){
     logger("run_analysis_onchange", level = "trace")
@@ -619,83 +626,6 @@ module_server_common <- function(module_id, check_data_loaded, ..., session = sh
 
   }
 
-
-#   tryCatch({
-#     force(settings_file)
-#     pipeline_path <- raveio::pipeline_find(pipeline_name)
-#     pipeline_settings_path <- file.path(pipeline_path, settings_file)
-#
-#     pipeline_settings <- local({
-#       settings <- raveio::load_yaml(pipeline_settings_path)
-#       list(
-#         set = function(...){
-#           args <- list(...)
-#           argnames <- names(args)
-#           if(!length(argnames)){
-#             return(as.list(settings))
-#           }
-#           args <- args[argnames != ""]
-#           argnames <- names(args)
-#           if(!length(argnames)){
-#             return(as.list(settings))
-#           }
-#           for(nm in argnames){
-#             settings[[nm]] <<- args[[nm]]
-#           }
-#           raveio::save_yaml(x = settings, file = pipeline_settings_path)
-#           return(as.list(settings))
-#         },
-#         get = function(key, default = NA){
-#           if(missing(key)){
-#             return(as.list(settings))
-#           }
-#           if(!settings$`@has`(key)){
-#             return(default)
-#           }
-#           settings[[key]]
-#         }
-#       )
-#     })
-#     pipeline_set <- pipeline_settings$set
-#     pipeline_get <- function(key, missing = NULL, constraint){
-#       re <- pipeline_settings$get(key, missing)
-#       if(!missing(constraint)){
-#         re <- re %OF% constraint
-#       }
-#       re
-#     }
-#
-#     component_container <- ravedash:::RAVEShinyComponentContainer$new(
-#       module_id = module_id, pipeline_name = pipeline_name,
-#       settings_file = settings_file, pipeline_path = pipeline_path
-#     )
-#
-#     component_container$validate_server(session)
-#
-#     reactive_handlers$has_pipeline <- TRUE
-#     reactive_handlers$pipeline_name <- pipeline_name
-#     reactive_handlers$pipeline_path <- pipeline_path
-#     reactive_handlers$pipeline_get <- structure(
-#       pipeline_get, class = "ravedash_printable",
-#       docs = paste(
-#         sep = "\n",
-#         "Get variables from last executed pipeline. Usage:\n",
-#         "server_tools <- get_default_handlers()\n",
-#         "# get variable called `varname`",
-#         'server_tools$pipeline_get("varname", missing = NULL)\n',
-#         "# get variable with constraint",
-#         'server_tools$module_is_active("varname", constraint = c("A", "B", "C"))'
-#       )
-#     )
-#     reactive_handlers$pipeline_set <- pipeline_set
-#     reactive_handlers$component_container <- component_container
-#
-#
-#   }, error = function(e) {
-#     reactive_handlers$has_pipeline <- FALSE
-#     logger("Unable to register component container: \n", e$message, level = "warning")
-#   })
-
   invisible(reactive_handlers)
 }
 
@@ -707,4 +637,231 @@ print.ravedash_printable <- function(x, ...){
   } else {
     cat(attr(x, "docs"), "\n", sep = "")
   }
+}
+
+
+format_export_settings.pdf <- function(settings) {
+
+  settings <- as.list(settings)
+  default_opt <- grDevices::pdf.options()
+  settings$useDingbats %?<-% FALSE
+  settings$width %?<-% 12
+  settings$height %?<-% 6.75
+  settings$onefile %?<-% TRUE
+  settings$title %?<-% "RAVE Graphics Output"
+  settings$family %?<-% default_opt$family
+  settings$encoding %?<-% default_opt$encoding
+  settings$colormodel %?<-% default_opt$colormodel
+  settings$pointsize %?<-% default_opt$pointsize
+  settings$fonts %?<-% default_opt$fonts
+  settings$extension <- "pdf"
+
+  pre_func <- settings$pre
+  post_func <- settings$post
+  settings$pre <- function(con) {
+
+    grDevices::pdf(file = con, width = settings$width, height = settings$height,
+                   onefile = settings$onefile, title = settings$title,
+                   fonts = settings$fonts, useDingbats = settings$useDingbats,
+                   family = settings$family, encoding = settings$encoding,
+                   colormodel = settings$colormodel, pointsize = settings$pointsize)
+
+    if(is.function(pre_func)) {
+      if(length(formals(pre_func))) {
+        pre_func(con)
+      } else {
+        pre_func()
+      }
+    }
+  }
+  settings$post <- function(con, data) {
+    try(silent = TRUE, expr = {
+      if(is.function(post_func)) {
+        if(length(formals(post_func)) >= 2) {
+          post_func(con, data)
+        } else {
+          post_func()
+        }
+      }
+    })
+    grDevices::dev.off()
+  }
+
+  settings
+}
+
+format_export_settings.csv <- function(settings) {
+
+  settings <- as.list(settings)
+  settings$quote %?<-% TRUE
+  settings$na %?<-% "NA"
+  settings$dec %?<-% "."
+  settings$row.names %?<-% TRUE
+  settings$fileEncoding %?<-% ""
+  settings$eol %?<-% "\n"
+  settings$extension <- "csv"
+
+  pre_func <- settings$pre
+  post_func <- settings$post
+  settings$pre <- function(con) {
+    if(is.function(pre_func)) {
+      if(length(formals(pre_func))) {
+        pre_func(con)
+      } else {
+        pre_func()
+      }
+    }
+  }
+  settings$post <- function(con, data) {
+    try(silent = TRUE, expr = {
+      if(is.function(post_func)) {
+        if(length(formals(post_func)) >= 2) {
+          data <- post_func(con, data)
+        } else {
+          data <- post_func(data)
+        }
+      }
+    })
+    if(inherits(data, "datatables")) {
+      data <- data$x$data
+    }
+    data <- data[, trimws(names(data)) != "", drop = FALSE]
+    utils::write.csv(x = data, file = con, quote = settings$quote,
+                     na = settings$na, row.names = settings$row.names,
+                     fileEncoding = settings$fileEncoding,
+                     eol = settings$eol)
+  }
+
+  settings
+}
+
+format_export_settings.3dviewer <- function(settings) {
+
+  settings <- as.list(settings)
+  settings$title %?<-% "RAVE 3D Viewer"
+  settings$extension <- "zip"
+
+  pre_func <- settings$pre
+  post_func <- settings$post
+  settings$pre <- function(con) {
+    if(is.function(pre_func)) {
+      if(length(formals(pre_func))) {
+        pre_func(con)
+      } else {
+        pre_func()
+      }
+    }
+    dipsaus::shiny_alert2(title = "Exporting 3D Viewer", text = "Please wait...", auto_close = FALSE, buttons = FALSE, icon = "info")
+  }
+  settings$post <- function(con, data) {
+    tf <- tempfile()
+    on.exit({
+      try(silent = TRUE, {
+        dipsaus::close_alert2()
+      })
+      if(file.exists(tf)) {
+        unlink(tf, recursive = TRUE)
+      }
+    }, add = TRUE, after = TRUE)
+
+    try(silent = TRUE, expr = {
+      if(is.function(post_func)) {
+        if(length(formals(post_func)) >= 2) {
+          data <- post_func(con, data)
+        } else {
+          data <- post_func(data)
+        }
+      }
+    })
+
+    threeBrain::save_brain(data, directory = tf, as_zip = TRUE, title = settings$title)
+    file.copy(file.path(tf, "compressed.zip"), con)
+  }
+
+  settings
+}
+
+format_export_settings.htmlwidget <- function(settings) {
+
+  settings <- as.list(settings)
+  settings$title %?<-% "RAVE HTML Widget"
+  settings$extension <- "html"
+
+  pre_func <- settings$pre
+  post_func <- settings$post
+  settings$pre <- function(con) {
+    if(is.function(pre_func)) {
+      if(length(formals(pre_func))) {
+        pre_func(con)
+      } else {
+        pre_func()
+      }
+    }
+    dipsaus::shiny_alert2(title = "Exporting HTML Widget", text = "Please wait...", auto_close = TRUE, buttons = FALSE, icon = "info")
+  }
+  settings$post <- function(con, data) {
+    tf <- tempfile(fileext = ".html")
+    on.exit({
+      try(silent = TRUE, {
+        dipsaus::close_alert2()
+      })
+      if(file.exists(tf)) {
+        unlink(tf, recursive = TRUE)
+      }
+    }, add = TRUE, after = TRUE)
+
+    try(silent = TRUE, expr = {
+      if(is.function(post_func)) {
+        if(length(formals(post_func)) >= 2) {
+          data <- post_func(con, data)
+        } else {
+          data <- post_func(data)
+        }
+      }
+    })
+
+    htmlwidgets::saveWidget(widget = data, file = tf, selfcontained = TRUE, title = settings$title)
+    file.copy(tf, con)
+    # Make sure the alert is shown
+    Sys.sleep(0.2)
+  }
+
+  settings
+}
+
+format_export_settings.custom <- function(settings) {
+
+  settings <- as.list(settings)
+  settings$extension %?<-% "rds"
+
+  pre_func <- settings$pre
+  post_func <- settings$post
+  settings$pre <- function(con) {
+    if(is.function(pre_func)) {
+      if(length(formals(pre_func))) {
+        pre_func(con)
+      } else {
+        pre_func()
+      }
+    }
+  }
+  settings$post <- function(con, data) {
+    if(is.function(post_func)) {
+      if(length(formals(post_func)) >= 2) {
+        data <- post_func(con, data)
+      } else {
+        data <- post_func(data)
+      }
+    }
+
+    if(
+      !file.exists(con) &&
+      identical(settings$extension, "rds")
+    ) {
+      # save to rds
+      saveRDS(object = data, file = con)
+    }
+  }
+
+  settings
 }
